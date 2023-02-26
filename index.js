@@ -1,4 +1,5 @@
-const { Client, Events, GatewayIntentBits, Collection } = require('discord.js')
+const { Client, Events, GatewayIntentBits, Collection, EmbedBuilder} = require('discord.js')
+const { io } = require("socket.io-client");
 
 // dotenv
 const dotenv = require('dotenv')
@@ -8,11 +9,60 @@ const { TOKEN } = process.env
 // importação dos comandos
 const fs = require("node:fs")
 const path = require("node:path")
+const deploy = require('./deploy-commands')
 const commandsPath = path.join(__dirname, "commands")
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"))
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] })
 client.commands = new Collection()
+
+//socket to api
+
+const socket = new io('ws://localhost:3000');
+
+socket.on('queue-att', async (data) => {
+
+    let message = await client.guilds.resolve(data.guildId).channels.resolve(data.channelId).messages.fetch(data.messageId)
+    const embed = new EmbedBuilder()
+      .setColor("Orange")
+      .setTitle("Response: GPT")
+      .addFields(
+        //{ name: "\u200B", value: "\u200B" },
+        {
+          name: `You are in the ${data.queue} position in queue.`,
+          value: `You need to wait!`,
+          inline: true,
+        },
+      );    
+
+    await message.edit({embeds: [embed]})
+})
+
+socket.on('clear-embed', async (data) => {
+    let message = await client.guilds.resolve(data.guildId).channels.resolve(data.channelId).messages.fetch(data.messageId)
+    const embed = new EmbedBuilder()
+    .setColor("Orange")
+    .setTitle(data.query)
+    .addFields(
+        { name: "\u200B", value: "\u200B" },
+      );   
+    await message.edit({embeds: [embed]})
+})
+
+socket.on('queue-response', async (data) => {
+    let message = await client.guilds.resolve(data.guildId).channels.resolve(data.channelId).messages.fetch(data.messageId)
+    const embed = new EmbedBuilder()
+      .setColor("Orange")
+      .setTitle(data.query)
+      .addFields(
+        ...data.response
+      );    
+
+    await message.edit({embeds: [embed]})
+
+})
+
+//=================
 
 for (const file of commandFiles){
     const filePath = path.join(commandsPath, file)
@@ -25,7 +75,8 @@ for (const file of commandFiles){
 }
 
 // Login do bot
-client.once(Events.ClientReady, c => {
+client.once(Events.ClientReady, async c => {
+    await deploy();
 	console.log(`Pronto! Login realizado como ${c.user.tag}`)
 });
 client.login(TOKEN)
